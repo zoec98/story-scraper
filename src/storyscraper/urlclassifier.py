@@ -82,6 +82,16 @@ def _iter_rules() -> Iterable[SiteRule]:
             documentation="Stories hosted on bdsmlibrary.com.",
         ),
         SiteRule(
+            pattern=re.compile(
+                r"https?://(?:www\.)?inkitt\.com/stories/.*", re.IGNORECASE
+            ),
+            name="inkitt",
+            full_name="Inkitt",
+            fetch_agent="inkitt_fetcher",
+            transform_agent="inkitt_transformer",
+            documentation="Stories hosted on inkitt.com.",
+        ),
+        SiteRule(
             pattern=re.compile(r"https?://(?:www\.)?mcstories\.com/.*", re.IGNORECASE),
             name="mcstories",
             full_name="The Erotic Mind-Control Story Archive",

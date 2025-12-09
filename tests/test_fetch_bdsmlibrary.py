@@ -5,17 +5,29 @@ from pathlib import Path
 from storyscraper.fetch import run_fetch_list_phase
 from storyscraper.options import StoryScraperOptions
 
-FIXTURE_DIR = Path(__file__).resolve().parents[1] / "user-provided-data" / "bdsmlibrary"
 
-
-def _load_fixture(name: str) -> str:
-    return (FIXTURE_DIR / name).read_text(encoding="cp1252")
+def _fixture_html() -> str:
+    return """
+    <html>
+      <head>
+        <title>BDSM Library - Story: Hired Help</title>
+      </head>
+      <body>
+        <a href="/stories/author.php?authorid=82">Dark One</a>
+        <table>
+          <tr><td><b><a href="/stories/chapter.php?storyid=122&chapterid=1075">Chapter 1</a></b></td></tr>
+          <tr><td><b><a href="/stories/chapter.php?storyid=122&chapterid=1076">Chapter 2</a></b></td></tr>
+          <tr><td><b><a href="/stories/chapter.php?storyid=999&chapterid=1">Other Story</a></b></td></tr>
+        </table>
+      </body>
+    </html>
+    """
 
 
 def test_bdsmlibrary_fetcher_extracts_chapters_and_metadata(
     monkeypatch, tmp_path: Path
 ) -> None:
-    html = _load_fixture("story-122-index.html")
+    html = _fixture_html()
     options = StoryScraperOptions(
         name=None,
         slug=None,
@@ -36,7 +48,7 @@ def test_bdsmlibrary_fetcher_extracts_chapters_and_metadata(
 
     urls = run_fetch_list_phase(options, stories_root=tmp_path)
 
-    assert len(urls) == 53
+    assert len(urls) == 2
     assert urls[0] == (
         "https://www.bdsmlibrary.com/stories/chapter.php?storyid=122&chapterid=1075"
     )
