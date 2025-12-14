@@ -60,12 +60,12 @@ def test_literotica_transformer_converts_tilde_fences_to_hr() -> None:
       "@type": "Article",
       "headline": "Fence Test"
     }</script>
-    pageText:"First line.\\n\\n~~~\\n\\nSecond line."
+    pageText:"First line.\\n\\n  ~~~  \\n\\nSecond line."
     </body></html>
     """
     transformer = Transformer()
     markdown = transformer._convert_html_to_markdown(raw)  # type: ignore[attr-defined]
 
     assert "# Fence Test" in markdown
-    assert "***" in markdown
+    assert "---" in markdown
     assert "~~~" not in markdown

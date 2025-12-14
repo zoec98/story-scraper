@@ -54,7 +54,7 @@ class Transformer(AutoTransformer):
     def _sanitize_markdown(self, text: str) -> str:
         """Replace fence-like tilde lines with a Markdown HR to avoid code blocks."""
 
-        return re.sub(r"^~{3,}\s*$", "***", text, flags=re.MULTILINE)
+        return re.sub(r"^[ \t]*~{3,}[ \t]*$", "---", text, flags=re.MULTILINE)
 
     def _extract_article_metadata(self, html: str) -> dict[str, Any] | None:
         soup = BeautifulSoup(html, "html.parser")

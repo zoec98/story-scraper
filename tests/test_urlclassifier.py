@@ -49,6 +49,18 @@ def test_classify_url_matches_inkitt() -> None:
     assert result.packaging_agent is None
 
 
+def test_classify_url_matches_patreon_collection() -> None:
+    url = "https://www.patreon.com/collection/1374355"
+
+    result = classify_url(url)
+
+    assert isinstance(result, SiteMatch)
+    assert result.name == "patreon"
+    assert result.fetch_agent == "patreon_fetcher"
+    assert result.transform_agent == "patreon_transformer"
+    assert result.packaging_agent is None
+
+
 def test_classify_url_matches_wattpad() -> None:
     url = "https://www.wattpad.com/12345-example"
 
