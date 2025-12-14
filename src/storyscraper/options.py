@@ -35,6 +35,7 @@ class StoryScraperOptions:
     verbose: bool = False
     quiet: bool = False
     cookies_from_browser: str | None = None
+    invocation_command: str | None = None
 
     def effective_name(self) -> str:
         """Return the user-specified or derived story name."""
@@ -125,6 +126,12 @@ def parse_cli_args(argv: Sequence[str] | None = None) -> StoryScraperOptions:
     author = args.author
     chosen_author = author
     cookies_from_browser = args.cookies_from_browser
+    import shlex
+    import sys
+
+    argv_source = list(argv) if argv is not None else sys.argv[1:]
+    program = sys.argv[0] if sys.argv else "storyscraper"
+    invocation_command = shlex.join([program, *argv_source])
 
     site_match: SiteMatch | None = classify_url(download_url)
     fetch_agent = _merge_agent(args.fetch_agent, site_match, "fetch_agent")
@@ -148,6 +155,7 @@ def parse_cli_args(argv: Sequence[str] | None = None) -> StoryScraperOptions:
         verbose=args.verbose,
         quiet=args.quiet,
         cookies_from_browser=cookies_from_browser,
+        invocation_command=invocation_command,
     )
     return options
 

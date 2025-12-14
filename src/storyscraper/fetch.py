@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import shlex
+import stat
 from pathlib import Path
 
 from .fetchers import load_fetcher, ProgressCallback
@@ -17,7 +20,9 @@ def run_fetch_list_phase(
 
     fetcher = load_fetcher(options.fetch_agent)
     root = Path(stories_root) if stories_root is not None else Path("stories")
-    return fetcher.list_phase(options, stories_root=root)
+    urls = fetcher.list_phase(options, stories_root=root)
+    _write_doit_file(root / options.effective_slug(), options)
+    return urls
 
 
 def run_fetch_phase(
@@ -36,4 +41,33 @@ def run_fetch_phase(
         stories_root=root,
         force_fetch=force_fetch,
         progress_callback=progress_callback,
+    )
+
+
+def _write_doit_file(story_dir: Path, options: StoryScraperOptions) -> None:
+    story_dir.mkdir(parents=True, exist_ok=True)
+    destination = story_dir / "doit"
+
+    if options.invocation_command:
+        command = options.invocation_command
+    else:
+        command = shlex.join(["storyscraper", options.download_url])
+
+    try:
+        import pwd  # Available on Unix-like systems
+
+        home_dir = pwd.getpwuid(os.getuid()).pw_dir
+        if command.startswith(home_dir):
+            command = "~" + command[len(home_dir) :]
+    except Exception:  # pragma: no cover - non-Unix platforms or lookup failures
+        pass
+
+    content = f"#! /usr/bin/env bash\n{command}\n"
+    destination.write_text(content, encoding="utf-8")
+    mode = destination.stat().st_mode
+    destination.chmod(
+        mode
+        | stat.S_IXUSR
+        | stat.S_IXGRP
+        | stat.S_IXOTH
     )

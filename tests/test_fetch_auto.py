@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -74,6 +75,13 @@ def test_run_fetch_list_phase_auto(
 
     download_file = tmp_path / "silver-leash" / "download_urls.txt"
     assert download_file.read_text(encoding="utf-8").splitlines() == expected
+    doit = tmp_path / "silver-leash" / "doit"
+    assert doit.exists()
+    doit_text = doit.read_text(encoding="utf-8").splitlines()
+    assert doit_text[0] == "#! /usr/bin/env bash"
+    assert "storyscraper" in doit_text[1]
+    assert options.download_url in doit_text[1]
+    assert os.access(doit, os.X_OK)
 
 
 def test_run_fetch_list_phase_auto_creates_story_directory(
