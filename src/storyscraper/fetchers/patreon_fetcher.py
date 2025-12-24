@@ -95,7 +95,9 @@ class Fetcher(AutoFetcher):
                 continue
             try:
                 data = self._fetch_bytes(url)
-            except Exception as exc:  # pragma: no cover - network failures mocked in tests
+            except (
+                Exception
+            ) as exc:  # pragma: no cover - network failures mocked in tests
                 self._log_failure(log_file, url, exc)
                 continue
 

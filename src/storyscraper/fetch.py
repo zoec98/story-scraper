@@ -65,9 +65,4 @@ def _write_doit_file(story_dir: Path, options: StoryScraperOptions) -> None:
     content = f"#! /usr/bin/env bash\n{command}\n"
     destination.write_text(content, encoding="utf-8")
     mode = destination.stat().st_mode
-    destination.chmod(
-        mode
-        | stat.S_IXUSR
-        | stat.S_IXGRP
-        | stat.S_IXOTH
-    )
+    destination.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)

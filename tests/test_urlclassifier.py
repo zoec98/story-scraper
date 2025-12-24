@@ -37,6 +37,18 @@ def test_classify_url_matches_bdsmlibrary() -> None:
     assert result.packaging_agent is None
 
 
+def test_classify_url_matches_eroticstories() -> None:
+    url = "https://www.eroticstories.com/my/story.php?id=61794"
+
+    result = classify_url(url)
+
+    assert isinstance(result, SiteMatch)
+    assert result.name == "eroticstories"
+    assert result.fetch_agent == "eroticstories_fetcher"
+    assert result.transform_agent is None
+    assert result.packaging_agent is None
+
+
 def test_classify_url_matches_inkitt() -> None:
     url = "https://www.inkitt.com/stories/1548300"
 

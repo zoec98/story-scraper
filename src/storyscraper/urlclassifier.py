@@ -73,6 +73,16 @@ def _iter_rules() -> Iterable[SiteRule]:
         ),
         SiteRule(
             pattern=re.compile(
+                r"https?://(?:www\.)?eroticstories\.com/my/(?:story|parts)\.php.*",
+                re.IGNORECASE,
+            ),
+            name="eroticstories",
+            full_name="EroticStories.com",
+            fetch_agent="eroticstories_fetcher",
+            documentation="Stories hosted on eroticstories.com.",
+        ),
+        SiteRule(
+            pattern=re.compile(
                 r"https?://(?:www\.)?bdsmlibrary\.com/stories/.*", re.IGNORECASE
             ),
             name="bdsmlibrary",
