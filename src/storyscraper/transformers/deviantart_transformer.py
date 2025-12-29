@@ -107,7 +107,7 @@ class Transformer(AutoTransformer):
             return
 
         html_text = html_files[0].read_text(encoding="utf-8")
-        title, author, tags, stats, badges = self._extract_metadata(html_text)
+        title, author, tags, stats, badges, extra = self._extract_metadata(html_text)
         payload: dict[str, object] = {
             "tags": tags,
             "title": title,
@@ -120,6 +120,8 @@ class Transformer(AutoTransformer):
             payload["views"] = stats.get("views")
         if badges is not None:
             payload["badges"] = badges
+        if extra:
+            payload.update(extra)
         destination = story_dir / "metadata.json"
         destination.write_text(
             json.dumps(payload, ensure_ascii=True, indent=2) + "\n",
@@ -134,6 +136,7 @@ class Transformer(AutoTransformer):
         list[str],
         dict[str, int] | None,
         dict[str, int] | None,
+        dict[str, object],
     ]:
         soup = BeautifulSoup(html, "html.parser")
         title: str | None = None
@@ -144,9 +147,10 @@ class Transformer(AutoTransformer):
             if isinstance(content, str):
                 title, author = self._split_title_author(content.strip())
 
-        tags = self._extract_tags(html)
+        tags: list[str] = []
         stats: dict[str, int] | None = None
         badges: dict[str, int] | None = None
+        extra: dict[str, object] = {}
 
         initial_state = self._extract_initial_state(html)
         if initial_state is not None:
@@ -162,6 +166,7 @@ class Transformer(AutoTransformer):
                     if isinstance(state_author, str) and state_author.strip():
                         author = state_author.strip()
                 stats = self._extract_stats_from_deviation(deviation)
+                extra.update(self._extract_deviation_metadata(deviation))
 
             extended = self._extract_deviation_extended(initial_state, deviation_id)
             if extended is not None:
@@ -169,8 +174,14 @@ class Transformer(AutoTransformer):
                 if state_tags:
                     tags = state_tags
                 badges = self._extract_badges_from_extended(extended)
+                extra.update(self._extract_extended_metadata(extended))
+            if deviation_id is not None:
+                extra["deviation_id"] = deviation_id
 
-        return title, author, tags, stats, badges
+        if not tags:
+            tags = self._extract_tags(html)
+
+        return title, author, tags, stats, badges, extra
 
     def _extract_initial_state(self, html: str) -> dict[str, object] | None:
         match = re.search(
@@ -254,6 +265,57 @@ class Transformer(AutoTransformer):
             "comments": comments_value,
             "views": views_value,
         }
+
+    def _extract_deviation_metadata(
+        self, deviation: dict[str, object]
+    ) -> dict[str, object]:
+        fields = {
+            "published_time": deviation.get("publishedTime"),
+            "mature_level": deviation.get("matureLevel"),
+            "is_mature": deviation.get("isMature"),
+            "is_nsfg": deviation.get("isNsfg"),
+            "is_commentable": deviation.get("isCommentable"),
+            "is_deleted": deviation.get("isDeleted"),
+            "is_published": deviation.get("isPublished"),
+            "is_downloadable": deviation.get("isDownloadable"),
+            "is_favouritable": deviation.get("isFavouritable"),
+            "is_ai_generated": deviation.get("isAiGenerated"),
+            "is_ai_use_disallowed": deviation.get("isAiUseDisallowed"),
+            "license": deviation.get("license"),
+            "short_url": deviation.get("shortUrl"),
+            "url": deviation.get("url"),
+            "text_content": deviation.get("textContent"),
+            "media": deviation.get("media"),
+            "is_adoptable": deviation.get("isAdoptable"),
+            "is_shareable": deviation.get("isShareable"),
+            "is_text_editable": deviation.get("isTextEditable"),
+            "is_background_editable": deviation.get("isBackgroundEditable"),
+            "is_upscaled": deviation.get("isUpscaled"),
+            "is_video": deviation.get("isVideo"),
+            "is_journal": deviation.get("isJournal"),
+            "is_purchasable": deviation.get("isPurchasable"),
+            "is_default_image": deviation.get("isDefaultImage"),
+            "is_antisocial": deviation.get("isAntisocial"),
+            "is_blocked": deviation.get("isBlocked"),
+            "can_update_ai_claim": deviation.get("canUpdateAiClaim"),
+            "has_private_comments": deviation.get("hasPrivateComments"),
+            "is_daily_deviation": deviation.get("isDailyDeviation"),
+            "is_dreamsofart": deviation.get("isDreamsofart"),
+        }
+        return {key: value for key, value in fields.items() if value is not None}
+
+    def _extract_extended_metadata(
+        self, extended: dict[str, object]
+    ) -> dict[str, object]:
+        fields = {
+            "description_text": extended.get("descriptionText"),
+            "deviation_uuid": extended.get("deviationUuid"),
+            "group_list_url": extended.get("groupListUrl"),
+            "parent_deviation_entity_id": extended.get("parentDeviationEntityId"),
+            "can_user_add_to_group": extended.get("canUserAddToGroup"),
+            "extended_stats": extended.get("stats"),
+        }
+        return {key: value for key, value in fields.items() if value is not None}
 
     def _extract_tags_from_extended(self, extended: dict[str, object]) -> list[str]:
         tags: list[str] = []
