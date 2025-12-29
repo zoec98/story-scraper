@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 from bs4 import BeautifulSoup, Tag
@@ -33,7 +35,7 @@ class Transformer(AutoTransformer):
             stories_root=stories_root,
             progress_callback=progress_callback,
         )
-        self._write_tags(options, stories_root=stories_root)
+        self._write_metadata(options, stories_root=stories_root)
         return generated
 
     def extract_content_root(self, soup: BeautifulSoup) -> Tag:
@@ -91,7 +93,7 @@ class Transformer(AutoTransformer):
                 return content_div
         return None
 
-    def _write_tags(
+    def _write_metadata(
         self,
         options: StoryScraperOptions,
         *,
@@ -105,13 +107,188 @@ class Transformer(AutoTransformer):
             return
 
         html_text = html_files[0].read_text(encoding="utf-8")
-        tags = self._extract_tags(html_text)
-        payload = {"tags": tags}
-        destination = story_dir / "tags.json"
+        title, author, tags, stats, badges = self._extract_metadata(html_text)
+        payload: dict[str, object] = {
+            "tags": tags,
+            "title": title,
+            "author": author,
+            "last_updated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+        if stats is not None:
+            payload["favorites"] = stats.get("favorites")
+            payload["comments"] = stats.get("comments")
+            payload["views"] = stats.get("views")
+        if badges is not None:
+            payload["badges"] = badges
+        destination = story_dir / "metadata.json"
         destination.write_text(
             json.dumps(payload, ensure_ascii=True, indent=2) + "\n",
             encoding="utf-8",
         )
+
+    def _extract_metadata(
+        self, html: str
+    ) -> tuple[
+        str | None,
+        str | None,
+        list[str],
+        dict[str, int] | None,
+        dict[str, int] | None,
+    ]:
+        soup = BeautifulSoup(html, "html.parser")
+        title: str | None = None
+        author: str | None = None
+        og_tag = soup.select_one(self._OG_TITLE_SELECTOR)
+        if og_tag is not None:
+            content = og_tag.get("content")
+            if isinstance(content, str):
+                title, author = self._split_title_author(content.strip())
+
+        tags = self._extract_tags(html)
+        stats: dict[str, int] | None = None
+        badges: dict[str, int] | None = None
+
+        initial_state = self._extract_initial_state(html)
+        if initial_state is not None:
+            deviation_id = self._extract_current_deviation_id(initial_state)
+            deviation = self._extract_deviation(initial_state, deviation_id)
+            if deviation is not None:
+                state_title = deviation.get("title")
+                if isinstance(state_title, str) and state_title.strip():
+                    title = state_title.strip()
+                author_info = deviation.get("author")
+                if isinstance(author_info, dict):
+                    state_author = author_info.get("username")
+                    if isinstance(state_author, str) and state_author.strip():
+                        author = state_author.strip()
+                stats = self._extract_stats_from_deviation(deviation)
+
+            extended = self._extract_deviation_extended(initial_state, deviation_id)
+            if extended is not None:
+                state_tags = self._extract_tags_from_extended(extended)
+                if state_tags:
+                    tags = state_tags
+                badges = self._extract_badges_from_extended(extended)
+
+        return title, author, tags, stats, badges
+
+    def _extract_initial_state(self, html: str) -> dict[str, object] | None:
+        match = re.search(
+            r'window\.__INITIAL_STATE__\s*=\s*JSON\.parse\("(.*?)"\);',
+            html,
+            re.DOTALL,
+        )
+        if match is None:
+            return None
+        raw = match.group(1)
+        try:
+            decoded = raw.encode("utf-8").decode("unicode_escape")
+            parsed = json.loads(decoded)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        if isinstance(parsed, dict):
+            return parsed
+        return None
+
+    def _extract_current_deviation_id(self, state: dict[str, object]) -> str | None:
+        duperbrowse = state.get("@@DUPERBROWSE")
+        if isinstance(duperbrowse, dict):
+            root_stream = duperbrowse.get("rootStream")
+            if isinstance(root_stream, dict):
+                current_open = root_stream.get("currentOpenItem")
+                if isinstance(current_open, (int, str)):
+                    return str(current_open)
+        return None
+
+    def _extract_deviation(
+        self, state: dict[str, object], deviation_id: str | None
+    ) -> dict[str, object] | None:
+        entities = state.get("@@entities")
+        if not isinstance(entities, dict):
+            return None
+        deviations = entities.get("deviation")
+        if isinstance(deviations, dict):
+            if deviation_id and deviation_id in deviations:
+                deviation = deviations.get(deviation_id)
+                if isinstance(deviation, dict):
+                    return deviation
+            for deviation in deviations.values():
+                if isinstance(deviation, dict):
+                    return deviation
+        return None
+
+    def _extract_deviation_extended(
+        self, state: dict[str, object], deviation_id: str | None
+    ) -> dict[str, object] | None:
+        entities = state.get("@@entities")
+        if not isinstance(entities, dict):
+            return None
+        extended = entities.get("deviationExtended")
+        if isinstance(extended, dict):
+            if deviation_id and deviation_id in extended:
+                deviation = extended.get(deviation_id)
+                if isinstance(deviation, dict):
+                    return deviation
+            for deviation in extended.values():
+                if isinstance(deviation, dict):
+                    return deviation
+        return None
+
+    def _extract_stats_from_deviation(
+        self, deviation: dict[str, object]
+    ) -> dict[str, int] | None:
+        stats = deviation.get("stats")
+        if not isinstance(stats, dict):
+            return None
+        favorites_value = stats.get("favourites")
+        comments_value = stats.get("comments")
+        views_value = stats.get("views")
+        if not isinstance(favorites_value, int):
+            return None
+        if not isinstance(comments_value, int):
+            return None
+        if not isinstance(views_value, int):
+            return None
+        return {
+            "favorites": favorites_value,
+            "comments": comments_value,
+            "views": views_value,
+        }
+
+    def _extract_tags_from_extended(self, extended: dict[str, object]) -> list[str]:
+        tags: list[str] = []
+        raw_tags = extended.get("tags")
+        if isinstance(raw_tags, list):
+            for item in raw_tags:
+                if isinstance(item, dict):
+                    name = item.get("name")
+                    if isinstance(name, str):
+                        tag = name.strip()
+                        if tag and tag not in tags:
+                            tags.append(tag)
+        return tags
+
+    def _extract_badges_from_extended(
+        self, extended: dict[str, object]
+    ) -> dict[str, int] | None:
+        raw_badges = extended.get("awardedBadges")
+        if not isinstance(raw_badges, list):
+            return None
+        badges: dict[str, int] = {}
+        for badge in raw_badges:
+            if not isinstance(badge, dict):
+                continue
+            name = badge.get("title") or badge.get("baseTitle")
+            count = badge.get("stackCount")
+            if not isinstance(name, str) or not isinstance(count, int):
+                continue
+            badge_name = name.strip()
+            if not badge_name:
+                continue
+            badges[badge_name] = count
+        if not badges:
+            return None
+        return badges
 
     def _extract_tags(self, html: str) -> list[str]:
         soup = BeautifulSoup(html, "html.parser")

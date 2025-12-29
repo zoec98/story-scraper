@@ -52,7 +52,7 @@ def test_deviantart_transformer_extracts_literature_text() -> None:
     assert "Line two." in markdown
 
 
-def test_deviantart_transformer_writes_tags_json(tmp_path: Path) -> None:
+def test_deviantart_transformer_writes_metadata_json(tmp_path: Path) -> None:
     options = StoryScraperOptions(
         name=None,
         slug=None,
@@ -89,6 +89,9 @@ def test_deviantart_transformer_writes_tags_json(tmp_path: Path) -> None:
 
     run_transform_phase(options, stories_root=tmp_path)
 
-    tags_path = story_dir / "tags.json"
-    tags = json.loads(tags_path.read_text(encoding="utf-8"))
-    assert tags == {"tags": ["asfr", "costume"]}
+    metadata_path = story_dir / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert metadata["tags"] == ["asfr", "costume"]
+    assert metadata["title"] == "Jack and Monica"
+    assert metadata["author"] == "stevemnd"
+    assert metadata["last_updated"].endswith("+00:00")
