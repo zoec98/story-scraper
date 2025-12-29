@@ -73,6 +73,18 @@ def test_classify_url_matches_patreon_collection() -> None:
     assert result.packaging_agent is None
 
 
+def test_classify_url_matches_deviantart() -> None:
+    url = "https://www.deviantart.com/stevemnd/art/Jack-and-Monica-597938201"
+
+    result = classify_url(url)
+
+    assert isinstance(result, SiteMatch)
+    assert result.name == "deviantart"
+    assert result.fetch_agent == "deviantart_fetcher"
+    assert result.transform_agent == "deviantart_transformer"
+    assert result.packaging_agent is None
+
+
 def test_classify_url_matches_wattpad() -> None:
     url = "https://www.wattpad.com/12345-example"
 

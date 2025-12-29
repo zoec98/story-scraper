@@ -28,6 +28,7 @@ def run_fetch_list_phase(
 
     fetcher = load_fetcher(options.fetch_agent)
     urls = fetcher.list_phase(options, stories_root=root)
+    story_dir = root / options.effective_slug()
     _write_doit_file(story_dir, options)
     return urls
 

@@ -119,6 +119,14 @@ def _iter_rules() -> Iterable[SiteRule]:
             documentation="Public Patreon collections (requires cookies for gated posts).",
         ),
         SiteRule(
+            pattern=re.compile(r"https?://(?:www\.)?deviantart\.com/.*", re.IGNORECASE),
+            name="deviantart",
+            full_name="DeviantArt",
+            fetch_agent="deviantart_fetcher",
+            transform_agent="deviantart_transformer",
+            documentation="Stories hosted on deviantart.com.",
+        ),
+        SiteRule(
             pattern=re.compile(r"https?://(?:www\.)?mcstories\.com/.*", re.IGNORECASE),
             name="mcstories",
             full_name="The Erotic Mind-Control Story Archive",
