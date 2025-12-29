@@ -147,3 +147,16 @@ def test_main_suppresses_warning_when_quiet(monkeypatch):
     cli.main(["--quiet", "https://example.com/story"])
 
     assert all("Warning:" not in message for message in messages)
+
+
+def test_main_list_site_rules_outputs_csv(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "run_fetch_list_phase", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cli, "run_fetch_phase", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cli, "run_transform_phase", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cli, "write_makefile", lambda *_args, **_kwargs: None)
+
+    exit_code = cli.main(["--list-site-rules", "csv"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out.splitlines()[0].startswith("pattern,name,full_name")

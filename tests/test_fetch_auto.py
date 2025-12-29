@@ -117,6 +117,31 @@ def test_run_fetch_list_phase_auto_trailing_slash(
     assert urls == ["https://mcstories.com/SilverLeash/chapter01.html"]
 
 
+def test_run_fetch_list_phase_from_file(
+    monkeypatch, tmp_path: Path, options: StoryScraperOptions
+) -> None:
+    url_file = tmp_path / "urls.txt"
+    urls = [
+        "https://example.com/one",
+        "https://example.com/two",
+    ]
+    url_file.write_text("\n".join(urls) + "\n", encoding="utf-8")
+
+    options.from_file = str(url_file)
+    options.download_url = urls[0]
+
+    monkeypatch.setattr(
+        "storyscraper.fetch.load_fetcher",
+        lambda *_args, **_kwargs: pytest.fail("load_fetcher should not be called"),
+    )
+
+    listed = run_fetch_list_phase(options, stories_root=tmp_path)
+
+    assert listed == urls
+    download_file = tmp_path / "silver-leash" / "download_urls.txt"
+    assert download_file.read_text(encoding="utf-8").splitlines() == urls
+
+
 def _write_download_list(path: Path, urls: list[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(urls), encoding="utf-8")

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import csv
+import json
 import warnings
+from io import StringIO
 from pathlib import Path
 from typing import Callable
 
@@ -10,6 +13,7 @@ from . import http as http_client
 from .fetch import run_fetch_list_phase, run_fetch_phase
 from .makefile import write_makefile
 from .options import parse_cli_args
+from .urlclassifier import list_site_rules
 from .transform import run_transform_phase
 
 ProgressCallback = Callable[[int, int, Path, bool], None]
@@ -19,6 +23,9 @@ def main(argv: list[str] | None = None) -> int:
     """Entry-point invoked by the `storyscraper` console script."""
 
     options = parse_cli_args(argv)
+    if options.list_site_rules_format:
+        print(_render_site_rules(options.list_site_rules_format))
+        return 0
     logger = _build_logger(options.quiet)
     verbose = options.verbose and not options.quiet
 
@@ -68,6 +75,57 @@ def main(argv: list[str] | None = None) -> int:
     logger("Makefile: generated pandoc build file")
 
     return 0
+
+
+def _render_site_rules(fmt: str) -> str:
+    rules = list_site_rules()
+    payload = [
+        {
+            "pattern": rule.pattern.pattern,
+            "name": rule.name,
+            "full_name": rule.full_name,
+            "documentation": rule.documentation,
+            "fetch_agent": rule.fetch_agent,
+            "transform_agent": rule.transform_agent,
+        }
+        for rule in rules
+    ]
+
+    if fmt == "json":
+        return json.dumps(payload, indent=2, sort_keys=True)
+
+    if fmt == "csv":
+        output = StringIO()
+        writer = csv.DictWriter(
+            output,
+            fieldnames=[
+                "pattern",
+                "name",
+                "full_name",
+                "documentation",
+                "fetch_agent",
+                "transform_agent",
+            ],
+        )
+        writer.writeheader()
+        writer.writerows(payload)
+        return output.getvalue().rstrip()
+
+    lines = []
+    for entry in payload:
+        lines.append(
+            " | ".join(
+                [
+                    entry["name"] or "",
+                    entry["full_name"] or "",
+                    entry["pattern"] or "",
+                    entry["fetch_agent"] or "",
+                    entry["transform_agent"] or "",
+                    entry["documentation"] or "",
+                ]
+            )
+        )
+    return "\n".join(lines)
 
 
 def _configure_http(options, log) -> None:

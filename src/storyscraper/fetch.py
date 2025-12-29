@@ -8,7 +8,7 @@ import stat
 from pathlib import Path
 
 from .fetchers import load_fetcher, ProgressCallback
-from .options import StoryScraperOptions
+from .options import StoryScraperOptions, load_urls_from_file
 
 
 def run_fetch_list_phase(
@@ -18,10 +18,17 @@ def run_fetch_list_phase(
 ) -> list[str]:
     """Run the list phase for the configured fetcher."""
 
-    fetcher = load_fetcher(options.fetch_agent)
     root = Path(stories_root) if stories_root is not None else Path("stories")
+    story_dir = root / options.effective_slug()
+    if options.from_file:
+        urls = load_urls_from_file(Path(options.from_file))
+        _write_download_list(story_dir, urls)
+        _write_doit_file(story_dir, options)
+        return urls
+
+    fetcher = load_fetcher(options.fetch_agent)
     urls = fetcher.list_phase(options, stories_root=root)
-    _write_doit_file(root / options.effective_slug(), options)
+    _write_doit_file(story_dir, options)
     return urls
 
 
@@ -66,3 +73,10 @@ def _write_doit_file(story_dir: Path, options: StoryScraperOptions) -> None:
     destination.write_text(content, encoding="utf-8")
     mode = destination.stat().st_mode
     destination.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def _write_download_list(story_dir: Path, urls: list[str]) -> None:
+    story_dir.mkdir(parents=True, exist_ok=True)
+    destination = story_dir / "download_urls.txt"
+    content = "\n".join(urls) + ("\n" if urls else "")
+    destination.write_text(content, encoding="utf-8")

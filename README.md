@@ -28,7 +28,7 @@ stories/
 All source code lives under `src/`, and tests live under `tests/`. Keep new modules discoverable by adding them in `src/` so `uv run mypy src` and `uv run pytest` stay fast.
 
 ### Workflow
-1. Gather the target URL(s) and an optional story name: `uv run storyscraper --url https://example.com/story --name "The Silver Leash"`.
+1. Gather the target URL(s) and an optional story name: `uv run storyscraper https://example.com/story --name "The Silver Leash"`.
 2. StoryScraper will slugify the name (`the-silver-leash`) and create the directory tree shown above.
 3. A site-specific downloader is used if available; otherwise the generic downloader pulls each chapter and records URLs in `download_urls.txt`.
 4. The fetch-phase downloads any missing chapter HTML files into `stories/<slug>/html/<slug>-NNN.html` (use `--force-fetch` to re-download even if files exist). Failures are appended to `stories/<slug>/fetch.log`.
@@ -40,11 +40,14 @@ All source code lives under `src/`, and tests live under `tests/`. Keep new modu
 ```
 uv run storyscraper [--name "Title"] [--slug slug] [--fetch-agent agent]
                     [--transform-agent agent] [--packaging-agent agent]
-                    [--author "Author Name"] [--force-fetch]
-                    [--quiet | --verbose] download-url
+                    [--author "Author Name"] [--force-fetch] [--from-file URLFILE]
+                    [--list-site-rules [json|csv|text]]
+                    [--quiet | --verbose] [download-url]
 ```
 - `--author`: specify the author name (defaults to site-specific metadata when available).
 - `--force-fetch`: re-downloads every chapter even if the HTML files already exist.
+- `--from-file`, `-f`: load a prebuilt list of chapter URLs (one per line), skipping list-phase URL discovery.
+- `--list-site-rules`: print site rule metadata in json/csv/text and exit (defaults to json).
 - `--quiet`: suppresses phase progress output (only errors/logs are emitted).
 - `--verbose`: prints per-file progress within each phase (mutually exclusive with `--quiet`).
 - `--cookies-from-browser`: import cookies from a supported browser profile (firefox/chrome/etc.) so downloads reuse your authenticated session.

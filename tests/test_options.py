@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from storyscraper.options import DEFAULT_AGENT, StoryScraperOptions, parse_cli_args
@@ -151,3 +153,49 @@ def test_parse_cli_args_accepts_cookies_option() -> None:
     options = parse_cli_args(["--cookies-from-browser", "firefox", url])
 
     assert options.cookies_from_browser == "firefox"
+
+
+def test_parse_cli_args_accepts_from_file(tmp_path: Path) -> None:
+    url_file = tmp_path / "urls.txt"
+    url_file.write_text(
+        "\n".join(
+            [
+                "# comment",
+                "https://example.com/one",
+                "",
+                "https://example.com/two",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    options = parse_cli_args(["--from-file", str(url_file)])
+
+    assert options.download_url == "https://example.com/one"
+    assert options.from_file == str(url_file)
+
+
+def test_parse_cli_args_rejects_url_with_from_file(tmp_path: Path) -> None:
+    url_file = tmp_path / "urls.txt"
+    url_file.write_text("https://example.com/one\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit):
+        parse_cli_args(["--from-file", str(url_file), "https://example.com/two"])
+
+
+def test_parse_cli_args_accepts_list_site_rules_default() -> None:
+    options = parse_cli_args(["--list-site-rules"])
+
+    assert options.list_site_rules_format == "json"
+
+
+def test_parse_cli_args_accepts_list_site_rules_format() -> None:
+    options = parse_cli_args(["--list-site-rules", "csv"])
+
+    assert options.list_site_rules_format == "csv"
+
+
+def test_parse_cli_args_rejects_list_site_rules_with_url() -> None:
+    with pytest.raises(SystemExit):
+        parse_cli_args(["--list-site-rules", "https://example.com/story"])

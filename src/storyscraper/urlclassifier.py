@@ -59,6 +59,12 @@ def classify_url(url: str) -> SiteMatch | None:
     return None
 
 
+def list_site_rules() -> list[SiteRule]:
+    """Return all site rules in priority order."""
+
+    return list(_iter_rules())
+
+
 def _iter_rules() -> Iterable[SiteRule]:
     """Yield all site rules in priority order."""
 

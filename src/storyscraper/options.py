@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 from dataclasses import dataclass
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Sequence
 from urllib.parse import urlparse, unquote
 
@@ -35,6 +35,8 @@ class StoryScraperOptions:
     verbose: bool = False
     quiet: bool = False
     cookies_from_browser: str | None = None
+    from_file: str | None = None
+    list_site_rules_format: str | None = None
     invocation_command: str | None = None
 
     def effective_name(self) -> str:
@@ -106,12 +108,45 @@ def parse_cli_args(argv: Sequence[str] | None = None) -> StoryScraperOptions:
         help="Load cookies from the specified browser profile (e.g., 'firefox').",
     )
     parser.add_argument(
+        "--from-file",
+        "-f",
+        help="Read download URLs from a file (one URL per line).",
+    )
+    parser.add_argument(
+        "--list-site-rules",
+        nargs="?",
+        const="json",
+        choices=("json", "csv", "text"),
+        help="Print site rules (json/csv/text) and exit; defaults to json.",
+    )
+    parser.add_argument(
         "download_url",
-        help="URL to download; required.",
+        nargs="?",
+        help="URL to download; required unless --from-file is set.",
     )
 
     args = parser.parse_args(argv)
-    download_url = args.download_url
+    if args.list_site_rules and (args.from_file or args.download_url):
+        parser.error("--list-site-rules cannot be combined with download URLs.")
+
+    if args.from_file and args.download_url:
+        parser.error("--from-file cannot be combined with a download URL.")
+
+    if args.from_file:
+        url_path = Path(args.from_file).expanduser()
+        url_list = load_urls_from_file(url_path)
+        if not url_list:
+            parser.error(f"--from-file contains no URLs: {url_path}")
+        download_url = url_list[0]
+        from_file = str(url_path)
+    elif args.list_site_rules:
+        download_url = ""
+        from_file = None
+    else:
+        if not args.download_url:
+            parser.error("download_url is required unless --from-file is set.")
+        download_url = args.download_url
+        from_file = None
 
     if args.quiet and args.verbose:
         parser.error("--quiet and --verbose cannot be combined.")
@@ -155,6 +190,8 @@ def parse_cli_args(argv: Sequence[str] | None = None) -> StoryScraperOptions:
         verbose=args.verbose,
         quiet=args.quiet,
         cookies_from_browser=cookies_from_browser,
+        from_file=from_file,
+        list_site_rules_format=args.list_site_rules,
         invocation_command=invocation_command,
     )
     return options
@@ -197,6 +234,19 @@ def _derive_name_from_url(url: str) -> str:
         candidate = parsed.netloc or "Story"
 
     return candidate.title()
+
+
+def load_urls_from_file(path: Path) -> list[str]:
+    """Read a newline-delimited URL list, ignoring blanks and comment lines."""
+
+    text = path.read_text(encoding="utf-8")
+    urls: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        urls.append(stripped)
+    return urls
 
 
 def slugify(value: str) -> str:
