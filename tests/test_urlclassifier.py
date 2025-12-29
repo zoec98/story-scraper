@@ -45,7 +45,7 @@ def test_classify_url_matches_eroticstories() -> None:
     assert isinstance(result, SiteMatch)
     assert result.name == "eroticstories"
     assert result.fetch_agent == "eroticstories_fetcher"
-    assert result.transform_agent is None
+    assert result.transform_agent == "eroticstories_transformer"
     assert result.packaging_agent is None
 
 

@@ -79,6 +79,7 @@ def _iter_rules() -> Iterable[SiteRule]:
             name="eroticstories",
             full_name="EroticStories.com",
             fetch_agent="eroticstories_fetcher",
+            transform_agent="eroticstories_transformer",
             documentation="Stories hosted on eroticstories.com.",
         ),
         SiteRule(
