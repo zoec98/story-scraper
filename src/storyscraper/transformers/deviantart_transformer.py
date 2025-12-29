@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from bs4 import BeautifulSoup, Tag
 
 from .auto import Transformer as AutoTransformer
+from ..options import StoryScraperOptions
 
 
 class Transformer(AutoTransformer):
@@ -16,6 +20,21 @@ class Transformer(AutoTransformer):
         "[data-hook='deviation_content']",
     )
     _OG_TITLE_SELECTOR = "meta[property='og:title']"
+
+    def transform_phase(
+        self,
+        options: StoryScraperOptions,
+        *,
+        stories_root: Path | None = None,
+        progress_callback=None,
+    ) -> list[Path]:  # type: ignore[override]
+        generated = super().transform_phase(
+            options,
+            stories_root=stories_root,
+            progress_callback=progress_callback,
+        )
+        self._write_tags(options, stories_root=stories_root)
+        return generated
 
     def extract_content_root(self, soup: BeautifulSoup) -> Tag:
         candidates: list[Tag] = []
@@ -71,3 +90,37 @@ class Transformer(AutoTransformer):
             if content_div is not None:
                 return content_div
         return None
+
+    def _write_tags(
+        self,
+        options: StoryScraperOptions,
+        *,
+        stories_root: Path | None = None,
+    ) -> None:
+        base_root = Path(stories_root) if stories_root is not None else Path("stories")
+        story_dir = base_root / options.effective_slug()
+        html_dir = story_dir / "html"
+        html_files = sorted(html_dir.glob("*.html"))
+        if not html_files:
+            return
+
+        html_text = html_files[0].read_text(encoding="utf-8")
+        tags = self._extract_tags(html_text)
+        payload = {"tags": tags}
+        destination = story_dir / "tags.json"
+        destination.write_text(
+            json.dumps(payload, ensure_ascii=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+    def _extract_tags(self, html: str) -> list[str]:
+        soup = BeautifulSoup(html, "html.parser")
+        tags: list[str] = []
+        for anchor in soup.select("a[data-tagname]"):
+            value = anchor.get("data-tagname")
+            if not isinstance(value, str):
+                continue
+            value = value.strip()
+            if value and value not in tags:
+                tags.append(value)
+        return tags
