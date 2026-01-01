@@ -30,11 +30,36 @@ class Transformer(AutoTransformer):
         stories_root: Path | None = None,
         progress_callback=None,
     ) -> list[Path]:  # type: ignore[override]
-        generated = super().transform_phase(
-            options,
-            stories_root=stories_root,
-            progress_callback=progress_callback,
-        )
+        base_root = Path(stories_root) if stories_root is not None else Path("stories")
+        story_dir = base_root / options.effective_slug()
+        html_dir = story_dir / "html"
+        markdown_dir = story_dir / "markdown"
+        log_file = story_dir / "transform.log"
+
+        if not html_dir.exists():
+            raise FileNotFoundError(
+                f"Missing HTML directory at {html_dir}. Run the fetch phase first."
+            )
+
+        markdown_dir.mkdir(parents=True, exist_ok=True)
+
+        html_files = sorted(html_dir.glob("*.html"))
+        ordered_files = self._sort_html_files_by_publish_date(html_files)
+
+        generated: list[Path] = []
+        total = len(ordered_files)
+        for index, html_path in enumerate(ordered_files, start=1):
+            destination = markdown_dir / f"{options.effective_slug()}-{index:03d}.md"
+            try:
+                html_text = html_path.read_text(encoding="utf-8")
+                markdown = self._convert_html_to_markdown(html_text)
+                destination.write_text(markdown, encoding="utf-8")
+                generated.append(destination)
+                if progress_callback:
+                    progress_callback(index, total, destination, False)
+            except Exception as exc:  # pragma: no cover - logged for later review
+                self._log_failure(log_file, html_path, exc)
+
         self._write_metadata(options, stories_root=stories_root)
         return generated
 
@@ -59,6 +84,35 @@ class Transformer(AutoTransformer):
                 return f"# {title}\n\n{body_markdown.lstrip()}"
             return body_markdown
         return super()._convert_html_to_markdown(html)
+
+    def _sort_html_files_by_publish_date(self, html_files: list[Path]) -> list[Path]:
+        def sort_key(path: Path) -> tuple[int, datetime, str]:
+            published = self._extract_publish_time(path)
+            if published is None:
+                return (1, datetime.max.replace(tzinfo=timezone.utc), path.name)
+            return (0, published, path.name)
+
+        return sorted(html_files, key=sort_key)
+
+    def _extract_publish_time(self, html_path: Path) -> datetime | None:
+        try:
+            html = html_path.read_text(encoding="utf-8")
+        except OSError:
+            return None
+        state = self._extract_initial_state(html)
+        if state is None:
+            return None
+        deviation_id = self._extract_current_deviation_id(state)
+        deviation = self._extract_deviation(state, deviation_id)
+        if deviation is None:
+            return None
+        published = deviation.get("publishedTime")
+        if not isinstance(published, str):
+            return None
+        try:
+            return datetime.strptime(published, "%Y-%m-%dT%H:%M:%S%z")
+        except ValueError:
+            return None
 
     def _extract_title_from_og(self, soup: BeautifulSoup) -> str | None:
         tag = soup.select_one(self._OG_TITLE_SELECTOR)
@@ -106,25 +160,37 @@ class Transformer(AutoTransformer):
         if not html_files:
             return
 
-        html_text = html_files[0].read_text(encoding="utf-8")
-        title, author, tags, stats, badges, extra = self._extract_metadata(html_text)
-        payload: dict[str, object] = {
-            "tags": tags,
-            "title": title,
-            "author": author,
-            "last_updated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        }
-        if stats is not None:
-            payload["favorites"] = stats.get("favorites")
-            payload["comments"] = stats.get("comments")
-            payload["views"] = stats.get("views")
-        if badges is not None:
-            payload["badges"] = badges
-        if extra:
-            payload.update(extra)
+        metadata_by_id: dict[str, dict[str, object]] = {}
+        for html_file in html_files:
+            html_text = html_file.read_text(encoding="utf-8")
+            title, author, tags, stats, badges, extra = self._extract_metadata(
+                html_text
+            )
+            deviation_id = extra.get("deviation_id")
+            if not isinstance(deviation_id, str) or not deviation_id:
+                continue
+            payload: dict[str, object] = {
+                "deviation_id": deviation_id,
+                "saveto": f"html/{html_file.name}",
+                "tags": tags,
+                "title": title,
+                "author": author,
+                "last_updated": datetime.now(timezone.utc).isoformat(
+                    timespec="seconds"
+                ),
+            }
+            if stats is not None:
+                payload["favorites"] = stats.get("favorites")
+                payload["comments"] = stats.get("comments")
+                payload["views"] = stats.get("views")
+            if badges is not None:
+                payload["badges"] = badges
+            if extra:
+                payload.update(extra)
+            metadata_by_id[deviation_id] = payload
         destination = story_dir / "metadata.json"
         destination.write_text(
-            json.dumps(payload, ensure_ascii=True, indent=2) + "\n",
+            json.dumps(metadata_by_id, ensure_ascii=True, indent=2) + "\n",
             encoding="utf-8",
         )
 
