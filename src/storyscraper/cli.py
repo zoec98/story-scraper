@@ -129,6 +129,10 @@ def _render_site_rules(fmt: str) -> str:
 
 
 def _configure_http(options, log) -> None:
+    sleep_min = getattr(options, "sleep_min", None)
+    sleep_max = getattr(options, "sleep_max", None)
+    if sleep_min is not None or sleep_max is not None:
+        http_client.set_delay_bounds(sleep_min, sleep_max)
     if not options.cookies_from_browser:
         return
 

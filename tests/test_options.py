@@ -153,6 +153,17 @@ def test_parse_cli_args_accepts_cookies_option() -> None:
     options = parse_cli_args(["--cookies-from-browser", "firefox", url])
 
     assert options.cookies_from_browser == "firefox"
+    assert options.sleep_min is None
+    assert options.sleep_max is None
+
+
+def test_parse_cli_args_accepts_sleep_bounds() -> None:
+    url = "https://example.com/story"
+
+    options = parse_cli_args(["--sleep-min", "0.5", "--sleep-max", "2.5", url])
+
+    assert options.sleep_min == 0.5
+    assert options.sleep_max == 2.5
 
 
 def test_parse_cli_args_accepts_from_file(tmp_path: Path) -> None:

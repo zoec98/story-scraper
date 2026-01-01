@@ -44,6 +44,18 @@ def configure_session(*, cookies: CookieJar | None = None) -> None:
             _SESSION.cookies.set_cookie(cookie)
 
 
+def set_delay_bounds(min_delay: float | None, max_delay: float | None) -> None:
+    """Override the jitter delay bounds for HTTP requests."""
+
+    global _MIN_DELAY_SECONDS, _MAX_DELAY_SECONDS
+    if min_delay is not None:
+        _MIN_DELAY_SECONDS = max(0.0, float(min_delay))
+    if max_delay is not None:
+        _MAX_DELAY_SECONDS = max(0.0, float(max_delay))
+    if _MIN_DELAY_SECONDS > _MAX_DELAY_SECONDS:
+        _MIN_DELAY_SECONDS, _MAX_DELAY_SECONDS = _MAX_DELAY_SECONDS, _MIN_DELAY_SECONDS
+
+
 def request(
     method: str,
     url: str,

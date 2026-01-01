@@ -35,6 +35,8 @@ class StoryScraperOptions:
     verbose: bool = False
     quiet: bool = False
     cookies_from_browser: str | None = None
+    sleep_min: float | None = None
+    sleep_max: float | None = None
     from_file: str | None = None
     list_site_rules_format: str | None = None
     invocation_command: str | None = None
@@ -63,7 +65,14 @@ def parse_cli_args(argv: Sequence[str] | None = None) -> StoryScraperOptions:
         description="Download and package web stories.",
     )
     parser.add_argument(
-        "--name", help="Friendly story title; defaults to URL basename."
+        "--name",
+        "-N",
+        help="Friendly story title; defaults to URL basename."
+    )
+    parser.add_argument(
+        "--author",
+        "-A",
+        help="Author name; defaults to site metadata when available.",
     )
     parser.add_argument(
         "--slug",
@@ -85,21 +94,19 @@ def parse_cli_args(argv: Sequence[str] | None = None) -> StoryScraperOptions:
         help='Override the packaging agent (default: "auto").',
     )
     parser.add_argument(
-        "--author",
-        help="Author name; defaults to site metadata when available.",
-    )
-    parser.add_argument(
         "--force-fetch",
         action="store_true",
         help="Force re-downloading chapters even if HTML files already exist.",
     )
     parser.add_argument(
         "--quiet",
+        "-q",
         action="store_true",
         help="Suppress progress output (errors only).",
     )
     parser.add_argument(
         "--verbose",
+        "-v",
         action="store_true",
         help="Show detailed per-file progress for each phase.",
     )
@@ -108,12 +115,25 @@ def parse_cli_args(argv: Sequence[str] | None = None) -> StoryScraperOptions:
         help="Load cookies from the specified browser profile (e.g., 'firefox').",
     )
     parser.add_argument(
+        "--sleep-min",
+        "-s",
+        type=float,
+        help="Minimum jitter delay between requests (seconds).",
+    )
+    parser.add_argument(
+        "--sleep-max",
+        "-S",
+        type=float,
+        help="Maximum jitter delay between requests (seconds).",
+    )
+    parser.add_argument(
         "--from-file",
         "-f",
         help="Read download URLs from a file (one URL per line).",
     )
     parser.add_argument(
         "--list-site-rules",
+        "-l",
         nargs="?",
         const="json",
         choices=("json", "csv", "text"),
@@ -190,6 +210,8 @@ def parse_cli_args(argv: Sequence[str] | None = None) -> StoryScraperOptions:
         verbose=args.verbose,
         quiet=args.quiet,
         cookies_from_browser=cookies_from_browser,
+        sleep_min=args.sleep_min,
+        sleep_max=args.sleep_max,
         from_file=from_file,
         list_site_rules_format=args.list_site_rules,
         invocation_command=invocation_command,
