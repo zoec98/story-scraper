@@ -164,3 +164,45 @@ def test_deviantart_transformer_orders_by_publish_date(tmp_path: Path) -> None:
     )
     assert "First chapter." in first_markdown
     assert "Second chapter." in second_markdown
+
+
+def test_deviantart_transformer_uses_tiptap_when_unavailable(tmp_path: Path) -> None:
+    options = StoryScraperOptions(
+        name=None,
+        slug=None,
+        fetch_agent="auto",
+        transform_agent="deviantart_transformer",
+        packaging_agent="auto",
+        download_url="https://www.deviantart.com/example_user/art/example-222",
+        chosen_name="Example Story",
+        chosen_slug="example-story",
+    )
+    story_dir = tmp_path / options.effective_slug()
+    html_dir = story_dir / "html"
+    html_dir.mkdir(parents=True)
+    html_dir.joinpath("example-story-001.html").write_text(
+        """
+        <html>
+          <head>
+            <meta property="og:title" content="Example Story by example_user on DeviantArt">
+          </head>
+          <body>
+            <section class="YGJa8_">
+              <span class="I0C9ST"><h2>Literature Text</h2></span>
+              <div class="Nvt3Fl">This content is unavailable.</div>
+            </section>
+            <script>
+              window.__INITIAL_STATE__ = JSON.parse("{\\"@@DUPERBROWSE\\":{\\"rootStream\\":{\\"currentOpenItem\\":222}},\\"@@entities\\":{\\"deviation\\":{\\"222\\":{\\"deviationId\\":222,\\"textContent\\":{\\"html\\":{\\"type\\":\\"tiptap\\",\\"markup\\":\\"{\\\\\\"version\\\\\\":\\\\\\"1\\\\\\",\\\\\\"document\\\\\\":{\\\\\\"type\\\\\\":\\\\\\"doc\\\\\\",\\\\\\"content\\\\\\":[{\\\\\\"type\\\\\\":\\\\\\"paragraph\\\\\\",\\\\\\"content\\\\\\":[{\\\\\\"type\\\\\\":\\\\\\"text\\\\\\",\\\\\\"text\\\\\\":\\\\\\"Recovered text.\\\\\\"}]}]}}\\"}}}}}}");
+            </script>
+          </body>
+        </html>
+        """,
+        encoding="utf-8",
+    )
+
+    run_transform_phase(options, stories_root=tmp_path)
+
+    markdown = (story_dir / "markdown" / "example-story-001.md").read_text(
+        encoding="utf-8"
+    )
+    assert "Recovered text." in markdown

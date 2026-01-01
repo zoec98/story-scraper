@@ -79,11 +79,127 @@ class Transformer(AutoTransformer):
         title = self._extract_title_from_og(soup)
         literature_section = self._extract_literature_div(soup)
         if literature_section is not None:
+            if self._is_unavailable_content(literature_section):
+                rendered = self._render_tiptap_markup(html)
+                if rendered:
+                    body_markdown = super()._convert_html_to_markdown(rendered)
+                    if title:
+                        return f"# {title}\n\n{body_markdown.lstrip()}"
+                    return body_markdown
             body_markdown = super()._convert_html_to_markdown(str(literature_section))
             if title:
                 return f"# {title}\n\n{body_markdown.lstrip()}"
             return body_markdown
+        rendered = self._render_tiptap_markup(html)
+        if rendered:
+            body_markdown = super()._convert_html_to_markdown(rendered)
+            if title:
+                return f"# {title}\n\n{body_markdown.lstrip()}"
+            return body_markdown
         return super()._convert_html_to_markdown(html)
+
+    def _is_unavailable_content(self, section: Tag) -> bool:
+        text = section.get_text(strip=True)
+        return text == "This content is unavailable."
+
+    def _render_tiptap_markup(self, html: str) -> str | None:
+        state = self._extract_initial_state(html)
+        if state is None:
+            return None
+        deviation_id = self._extract_current_deviation_id(state)
+        deviation = self._extract_deviation(state, deviation_id)
+        if deviation is None:
+            return None
+        text_content = deviation.get("textContent")
+        if not isinstance(text_content, dict):
+            return None
+        html_payload = text_content.get("html")
+        if not isinstance(html_payload, dict):
+            return None
+        if html_payload.get("type") != "tiptap":
+            return None
+        markup = html_payload.get("markup")
+        if not isinstance(markup, str) or not markup:
+            return None
+        try:
+            payload = json.loads(markup)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        document = payload.get("document")
+        if not isinstance(document, dict):
+            return None
+        return self._render_tiptap_node(document)
+
+    def _render_tiptap_node(self, node: dict[str, object]) -> str:
+        node_type = node.get("type")
+        if not isinstance(node_type, str):
+            return ""
+        content = node.get("content")
+        children = ""
+        if isinstance(content, list):
+            children = "".join(
+                self._render_tiptap_node(child)
+                for child in content
+                if isinstance(child, dict)
+            )
+        attrs = node.get("attrs") if isinstance(node.get("attrs"), dict) else {}
+        if node_type == "doc":
+            return children
+        if node_type == "paragraph":
+            return f"<p>{children}</p>"
+        if node_type == "heading":
+            level = 1
+            if isinstance(attrs, dict):
+                maybe_level = attrs.get("level")
+                if isinstance(maybe_level, int):
+                    level = max(1, min(6, maybe_level))
+            return f"<h{level}>{children}</h{level}>"
+        if node_type == "text":
+            text = node.get("text")
+            if not isinstance(text, str):
+                return ""
+            return self._apply_tiptap_marks(text, node.get("marks"))
+        if node_type == "hardBreak":
+            return "<br/>"
+        if node_type == "da-mention":
+            user: dict[str, object] = {}
+            if isinstance(attrs, dict):
+                raw_user = attrs.get("user")
+                if isinstance(raw_user, dict):
+                    user = raw_user
+            username = user.get("username")
+            if isinstance(username, str) and username:
+                return f"@{username}"
+            return ""
+        return children
+
+    def _apply_tiptap_marks(self, text: str, marks: object) -> str:
+        rendered = self._escape_html(text)
+        if not isinstance(marks, list):
+            return rendered
+        for mark in marks:
+            if not isinstance(mark, dict):
+                continue
+            mark_type = mark.get("type")
+            if mark_type == "bold":
+                rendered = f"<strong>{rendered}</strong>"
+            elif mark_type == "italic":
+                rendered = f"<em>{rendered}</em>"
+            elif mark_type == "underline":
+                rendered = f"<u>{rendered}</u>"
+            elif mark_type == "strike":
+                rendered = f"<del>{rendered}</del>"
+        return rendered
+
+    def _escape_html(self, text: str) -> str:
+        return (
+            text.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+        )
 
     def _sort_html_files_by_publish_date(self, html_files: list[Path]) -> list[Path]:
         def sort_key(path: Path) -> tuple[int, datetime, str]:
@@ -258,14 +374,63 @@ class Transformer(AutoTransformer):
         if match is None:
             return None
         raw = match.group(1)
+        decoded = self._unescape_js_string(raw)
+        if decoded is None:
+            return None
         try:
-            decoded = raw.encode("utf-8").decode("unicode_escape")
             parsed = json.loads(decoded)
-        except (UnicodeDecodeError, json.JSONDecodeError):
+        except json.JSONDecodeError:
             return None
         if isinstance(parsed, dict):
             return parsed
         return None
+
+    def _unescape_js_string(self, value: str) -> str | None:
+        output: list[str] = []
+        i = 0
+        length = len(value)
+        while i < length:
+            ch = value[i]
+            if ch != "\\":
+                output.append(ch)
+                i += 1
+                continue
+            i += 1
+            if i >= length:
+                return None
+            esc = value[i]
+            if esc == "u":
+                if i + 4 >= length:
+                    return None
+                hex_value = value[i + 1 : i + 5]
+                try:
+                    output.append(chr(int(hex_value, 16)))
+                except ValueError:
+                    return None
+                i += 5
+                continue
+            if esc == "n":
+                output.append("\n")
+            elif esc == "r":
+                output.append("\r")
+            elif esc == "t":
+                output.append("\t")
+            elif esc == "b":
+                output.append("\b")
+            elif esc == "f":
+                output.append("\f")
+            elif esc == '"':
+                output.append('"')
+            elif esc == "'":
+                output.append("'")
+            elif esc == "/":
+                output.append("/")
+            elif esc == "\\":
+                output.append("\\")
+            else:
+                output.append(esc)
+            i += 1
+        return "".join(output)
 
     def _extract_current_deviation_id(self, state: dict[str, object]) -> str | None:
         duperbrowse = state.get("@@DUPERBROWSE")

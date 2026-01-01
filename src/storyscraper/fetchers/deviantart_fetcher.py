@@ -320,14 +320,63 @@ class Fetcher(AutoFetcher):
         if match is None:
             return None
         raw = match.group(1)
+        decoded = self._unescape_js_string(raw)
+        if decoded is None:
+            return None
         try:
-            decoded = raw.encode("utf-8").decode("unicode_escape")
             parsed = json.loads(decoded)
-        except (UnicodeDecodeError, json.JSONDecodeError):
+        except json.JSONDecodeError:
             return None
         if isinstance(parsed, dict):
             return parsed
         return None
+
+    def _unescape_js_string(self, value: str) -> str | None:
+        output: list[str] = []
+        i = 0
+        length = len(value)
+        while i < length:
+            ch = value[i]
+            if ch != "\\":
+                output.append(ch)
+                i += 1
+                continue
+            i += 1
+            if i >= length:
+                return None
+            esc = value[i]
+            if esc == "u":
+                if i + 4 >= length:
+                    return None
+                hex_value = value[i + 1 : i + 5]
+                try:
+                    output.append(chr(int(hex_value, 16)))
+                except ValueError:
+                    return None
+                i += 5
+                continue
+            if esc == "n":
+                output.append("\n")
+            elif esc == "r":
+                output.append("\r")
+            elif esc == "t":
+                output.append("\t")
+            elif esc == "b":
+                output.append("\b")
+            elif esc == "f":
+                output.append("\f")
+            elif esc == '"':
+                output.append('"')
+            elif esc == "'":
+                output.append("'")
+            elif esc == "/":
+                output.append("/")
+            elif esc == "\\":
+                output.append("\\")
+            else:
+                output.append(esc)
+            i += 1
+        return "".join(output)
 
     def _log_gallery_page_fetch(
         self,
