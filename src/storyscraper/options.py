@@ -35,6 +35,7 @@ class StoryScraperOptions:
     verbose: bool = False
     quiet: bool = False
     cookies_from_browser: str | None = None
+    patreon_debug: bool = False
     sleep_min: float | None = None
     sleep_max: float | None = None
     from_file: str | None = None
@@ -65,9 +66,7 @@ def parse_cli_args(argv: Sequence[str] | None = None) -> StoryScraperOptions:
         description="Download and package web stories.",
     )
     parser.add_argument(
-        "--name",
-        "-N",
-        help="Friendly story title; defaults to URL basename."
+        "--name", "-N", help="Friendly story title; defaults to URL basename."
     )
     parser.add_argument(
         "--author",
@@ -113,6 +112,11 @@ def parse_cli_args(argv: Sequence[str] | None = None) -> StoryScraperOptions:
     parser.add_argument(
         "--cookies-from-browser",
         help="Load cookies from the specified browser profile (e.g., 'firefox').",
+    )
+    parser.add_argument(
+        "--patreon-debug",
+        action="store_true",
+        help="Emit Patreon-specific debug logs on HTTP 403 errors.",
     )
     parser.add_argument(
         "--sleep-min",
@@ -210,6 +214,7 @@ def parse_cli_args(argv: Sequence[str] | None = None) -> StoryScraperOptions:
         verbose=args.verbose,
         quiet=args.quiet,
         cookies_from_browser=cookies_from_browser,
+        patreon_debug=args.patreon_debug,
         sleep_min=args.sleep_min,
         sleep_max=args.sleep_max,
         from_file=from_file,

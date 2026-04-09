@@ -9,6 +9,7 @@ from typing import Iterable, Sequence
 from urllib.parse import ParseResult, urljoin, urlparse
 
 from bs4 import BeautifulSoup
+import requests
 
 from ..http import fetch_bytes as http_fetch_bytes
 from ..options import StoryScraperOptions
@@ -185,10 +186,39 @@ class Fetcher:
 
     def _log_failure(self, log_file: Path, url: str, exc: Exception) -> None:
         timestamp = datetime.now().isoformat(timespec="seconds")
-        message = f"{timestamp} ERROR {url} -> {exc}\n"
+        extra = self._format_http_error(exc)
+        suffix = f" ({extra})" if extra else ""
+        message = f"{timestamp} ERROR {url} -> {exc}{suffix}\n"
         log_file.parent.mkdir(parents=True, exist_ok=True)
         with log_file.open("a", encoding="utf-8") as handle:
             handle.write(message)
+
+    def _format_http_error(self, exc: Exception) -> str:
+        if not isinstance(exc, requests.HTTPError):
+            return ""
+        response = exc.response
+        if response is None:
+            return ""
+
+        headers = response.headers
+        keys = [
+            "cf-ray",
+            "cf-cache-status",
+            "server",
+            "content-type",
+            "content-encoding",
+            "content-language",
+            "x-request-id",
+            "x-patreon-uuid",
+            "x-patreon-sha",
+            "x-bypass-cf-error",
+        ]
+        parts = [f"status={response.status_code}"]
+        for key in keys:
+            value = headers.get(key)
+            if value:
+                parts.append(f"{key}={value}")
+        return "; ".join(parts)
 
 
 def _compute_base_directory(path: str) -> str:

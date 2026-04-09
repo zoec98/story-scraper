@@ -33,6 +33,48 @@ def _next_data_html(title: str, body: str) -> str:
     """
 
 
+def _api_json_payload(title: str, body: str) -> str:
+    payload = {
+        "data": {
+            "type": "post",
+            "attributes": {
+                "title": title,
+                "content": f"<div><p>{body}</p></div>",
+            },
+        }
+    }
+    return json.dumps(payload)
+
+
+def _api_json_rich_payload(title: str, body: str) -> str:
+    payload = {
+        "data": {
+            "type": "post",
+            "attributes": {
+                "title": title,
+                "content": None,
+                "content_json_string": json.dumps(
+                    {
+                        "type": "doc",
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": body,
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ),
+            },
+        }
+    }
+    return json.dumps(payload)
+
+
 def test_patreon_transformer_extracts_post_content() -> None:
     html = _next_data_html(
         "Harem House Chapter 43",
@@ -43,6 +85,30 @@ def test_patreon_transformer_extracts_post_content() -> None:
 
     assert markdown.lstrip().startswith("# Harem House Chapter 43")
     assert "The forest embraces us like a protective mother." in markdown
+
+
+def test_patreon_transformer_reads_api_json() -> None:
+    html = _api_json_payload(
+        "Harem House Chapter 44",
+        "A second chapter body appears.",
+    )
+    transformer = Transformer()
+    markdown = transformer._convert_html_to_markdown(html)  # type: ignore[attr-defined]
+
+    assert markdown.lstrip().startswith("# Harem House Chapter 44")
+    assert "A second chapter body appears." in markdown
+
+
+def test_patreon_transformer_reads_api_json_rich_content() -> None:
+    html = _api_json_rich_payload(
+        "Harem House Chapter 45",
+        "A richer chapter body appears.",
+    )
+    transformer = Transformer()
+    markdown = transformer._convert_html_to_markdown(html)  # type: ignore[attr-defined]
+
+    assert markdown.lstrip().startswith("# Harem House Chapter 45")
+    assert "A richer chapter body appears." in markdown
 
 
 def test_patreon_transformer_sanitizes_tilde_fences() -> None:

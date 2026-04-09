@@ -15,14 +15,18 @@ from __future__ import annotations
 
 import json
 import re
+import warnings
+from datetime import datetime
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+import requests
 from bs4 import BeautifulSoup
 
 from ..http import get as http_get
+from ..http import get_cookie_names
 from ..options import StoryScraperOptions, slugify
 from .auto import Fetcher as AutoFetcher
 
@@ -34,6 +38,7 @@ class Fetcher(AutoFetcher):
     _NEXT_DATA_RE = re.compile(
         r'__NEXT_DATA__"?\s*type="application/json">(.*?)</script>', re.S
     )
+    _session_bootstrapped = False
 
     def list_phase(
         self,
@@ -52,6 +57,7 @@ class Fetcher(AutoFetcher):
 
         post_ids = self._collect_post_ids(api_root)
         urls = [self._post_url_from_id(post_id) for post_id in post_ids]
+        urls = self._sort_post_urls(urls)
 
         updated_options = self._update_options_from_metadata(options, metadata)
         options = self._sync_options(options, updated_options)
@@ -94,11 +100,18 @@ class Fetcher(AutoFetcher):
                     progress_callback(index, total, destination, True)
                 continue
             try:
-                data = self._fetch_bytes(url)
+                data = self._fetch_post_api_bytes(url)
+            except requests.HTTPError as exc:
+                self._log_failure(log_file, url, exc)
+                if options.patreon_debug:
+                    self._log_debug_failure(log_file, url, exc)
+                continue
             except (
                 Exception
             ) as exc:  # pragma: no cover - network failures mocked in tests
                 self._log_failure(log_file, url, exc)
+                if options.patreon_debug:
+                    self._log_debug_failure(log_file, url, exc)
                 continue
 
             destination.write_bytes(data)
@@ -112,7 +125,17 @@ class Fetcher(AutoFetcher):
         return self._fetch_bytes(url).decode("utf-8", errors="replace")
 
     def _fetch_bytes(self, url: str) -> bytes:
+        self._bootstrap_session()
         return http_get(url, delay=False).content
+
+    def _bootstrap_session(self) -> None:
+        if self._session_bootstrapped:
+            return
+        try:
+            http_get("https://www.patreon.com/", delay=False)
+        except Exception:
+            pass
+        self._session_bootstrapped = True
 
     def _extract_collection_id(self, url: str, html: str) -> str:
         parsed = urlparse(url)
@@ -138,6 +161,55 @@ class Fetcher(AutoFetcher):
             links = data.get("links") or {}
             next_url = links.get("next")
         return post_ids
+
+    def _sort_post_urls(self, urls: list[str]) -> list[str]:
+        sortable: list[tuple[int, int, str]] = []
+        for index, url in enumerate(urls):
+            post_id = self._extract_numeric_post_id(url)
+            if post_id is None:
+                warnings.warn(
+                    f"Patreon: could not parse numeric post id from URL {url}"
+                )
+                sortable.append((1, index, url))
+            else:
+                sortable.append((0, post_id, url))
+        sortable.sort(key=lambda item: (item[0], item[1]))
+        return [item[2] for item in sortable]
+
+    def _extract_numeric_post_id(self, url: str) -> int | None:
+        parsed = urlparse(url)
+        last_segment = parsed.path.rstrip("/").split("/")[-1]
+        if last_segment.isdigit():
+            return int(last_segment)
+        return None
+
+    def _fetch_post_api_bytes(self, url: str) -> bytes:
+        post_id = self._extract_numeric_post_id(url)
+        if post_id is None:
+            raise ValueError(f"Patreon: could not parse post id from URL {url}")
+        api_url = f"https://www.patreon.com/api/posts/{post_id}"
+        response = http_get(api_url, delay=False)
+        return response.content
+
+    def _log_debug_failure(self, log_file: Path, url: str, exc: Exception) -> None:
+        if not isinstance(exc, requests.HTTPError):
+            return
+        response = exc.response
+        if response is None:
+            return
+
+        timestamp = datetime.now().isoformat(timespec="seconds")
+        cookie_names = get_cookie_names("patreon.com")
+        cookie_text = ", ".join(cookie_names) if cookie_names else "none"
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        with log_file.open("a", encoding="utf-8") as handle:
+            handle.write(
+                f"{timestamp} DEBUG {url} cookies=patreon.com[{cookie_text}]\n"
+            )
+            snippet = response.text.replace("\n", " ").replace("\r", " ").strip()
+            snippet = " ".join(snippet.split())
+            snippet = snippet[:500] if snippet else ""
+            handle.write(f"{timestamp} DEBUG {url} body_snippet={snippet}\n")
 
     def _fetch_json(self, url: str) -> dict[str, Any]:
         response = http_get(url, delay=False)

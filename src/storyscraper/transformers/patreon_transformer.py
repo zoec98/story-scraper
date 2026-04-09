@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 
 from .auto import Transformer as AutoTransformer
 from ..options import StoryScraperOptions, slugify
+from storyscraper.commons.richtext_renderer import render_richtext_document
 
 
 class Transformer(AutoTransformer):
@@ -70,6 +71,10 @@ class Transformer(AutoTransformer):
         return super()._convert_html_to_markdown(html)
 
     def _extract_content_and_title(self, html: str) -> tuple[str | None, str | None]:
+        stripped = html.lstrip()
+        if stripped.startswith("{"):
+            return self._extract_content_from_api_json(stripped)
+
         match = self._NEXT_DATA_RE.search(html)
         if not match:
             return None, None
@@ -90,21 +95,59 @@ class Transformer(AutoTransformer):
         )
 
         content_html = (
-            attributes.get("content") if isinstance(attributes, dict) else None
+            self._extract_post_content_html(attributes)
+            if isinstance(attributes, dict)
+            else None
         )
         title = attributes.get("title") if isinstance(attributes, dict) else None
 
-        if isinstance(content_html, str):
-            soup = BeautifulSoup(content_html, "html.parser")
-            for marker in soup.find_all(
-                string=lambda s: isinstance(s, str) and "in collection" in s.lower()
-            ):
-                parent = marker.parent
-                if parent:
-                    parent.decompose()
-            cleaned_html = str(soup)
+        if content_html is not None:
+            cleaned_html = self._clean_post_html(content_html)
             return cleaned_html, title if isinstance(title, str) else None
         return None, None
+
+    def _extract_content_from_api_json(
+        self, payload: str
+    ) -> tuple[str | None, str | None]:
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            return None, None
+
+        if not isinstance(data, dict):
+            return None, None
+
+        attributes = data.get("data", {}).get("attributes", {})
+        if not isinstance(attributes, dict):
+            return None, None
+
+        content_html = self._extract_post_content_html(attributes)
+        title = attributes.get("title")
+        if content_html is not None:
+            cleaned_html = self._clean_post_html(content_html)
+            return cleaned_html, title if isinstance(title, str) else None
+        return None, None
+
+    def _extract_post_content_html(self, attributes: dict[str, object]) -> str | None:
+        content_html = attributes.get("content")
+        if isinstance(content_html, str) and content_html.strip():
+            return content_html
+
+        rich_content = attributes.get("content_json_string")
+        if not isinstance(rich_content, str) or not rich_content.strip():
+            return None
+
+        return render_richtext_document(rich_content)
+
+    def _clean_post_html(self, content_html: str) -> str:
+        soup = BeautifulSoup(content_html, "html.parser")
+        for marker in soup.find_all(
+            string=lambda s: isinstance(s, str) and "in collection" in s.lower()
+        ):
+            parent = marker.parent
+            if parent:
+                parent.decompose()
+        return str(soup)
 
     def _sanitize_markdown(self, html: str) -> str:
         """Replace fence-like tilde lines with a Markdown HR to avoid code blocks."""

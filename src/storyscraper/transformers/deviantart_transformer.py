@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup, Tag
 
 from .auto import Transformer as AutoTransformer
 from ..options import StoryScraperOptions
+from storyscraper.commons.richtext_renderer import render_tiptap_markup
 
 
 class Transformer(AutoTransformer):
@@ -121,85 +122,7 @@ class Transformer(AutoTransformer):
         markup = html_payload.get("markup")
         if not isinstance(markup, str) or not markup:
             return None
-        try:
-            payload = json.loads(markup)
-        except json.JSONDecodeError:
-            return None
-        if not isinstance(payload, dict):
-            return None
-        document = payload.get("document")
-        if not isinstance(document, dict):
-            return None
-        return self._render_tiptap_node(document)
-
-    def _render_tiptap_node(self, node: dict[str, object]) -> str:
-        node_type = node.get("type")
-        if not isinstance(node_type, str):
-            return ""
-        content = node.get("content")
-        children = ""
-        if isinstance(content, list):
-            children = "".join(
-                self._render_tiptap_node(child)
-                for child in content
-                if isinstance(child, dict)
-            )
-        attrs = node.get("attrs") if isinstance(node.get("attrs"), dict) else {}
-        if node_type == "doc":
-            return children
-        if node_type == "paragraph":
-            return f"<p>{children}</p>"
-        if node_type == "heading":
-            level = 1
-            if isinstance(attrs, dict):
-                maybe_level = attrs.get("level")
-                if isinstance(maybe_level, int):
-                    level = max(1, min(6, maybe_level))
-            return f"<h{level}>{children}</h{level}>"
-        if node_type == "text":
-            text = node.get("text")
-            if not isinstance(text, str):
-                return ""
-            return self._apply_tiptap_marks(text, node.get("marks"))
-        if node_type == "hardBreak":
-            return "<br/>"
-        if node_type == "da-mention":
-            user: dict[str, object] = {}
-            if isinstance(attrs, dict):
-                raw_user = attrs.get("user")
-                if isinstance(raw_user, dict):
-                    user = raw_user
-            username = user.get("username")
-            if isinstance(username, str) and username:
-                return f"@{username}"
-            return ""
-        return children
-
-    def _apply_tiptap_marks(self, text: str, marks: object) -> str:
-        rendered = self._escape_html(text)
-        if not isinstance(marks, list):
-            return rendered
-        for mark in marks:
-            if not isinstance(mark, dict):
-                continue
-            mark_type = mark.get("type")
-            if mark_type == "bold":
-                rendered = f"<strong>{rendered}</strong>"
-            elif mark_type == "italic":
-                rendered = f"<em>{rendered}</em>"
-            elif mark_type == "underline":
-                rendered = f"<u>{rendered}</u>"
-            elif mark_type == "strike":
-                rendered = f"<del>{rendered}</del>"
-        return rendered
-
-    def _escape_html(self, text: str) -> str:
-        return (
-            text.replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace('"', "&quot;")
-        )
+        return render_tiptap_markup(markup)
 
     def _sort_html_files_by_publish_date(self, html_files: list[Path]) -> list[Path]:
         def sort_key(path: Path) -> tuple[int, datetime, str]:

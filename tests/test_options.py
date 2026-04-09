@@ -155,6 +155,15 @@ def test_parse_cli_args_accepts_cookies_option() -> None:
     assert options.cookies_from_browser == "firefox"
     assert options.sleep_min is None
     assert options.sleep_max is None
+    assert options.patreon_debug is False
+
+
+def test_parse_cli_args_accepts_patreon_debug() -> None:
+    url = "https://example.com/story"
+
+    options = parse_cli_args(["--patreon-debug", url])
+
+    assert options.patreon_debug is True
 
 
 def test_parse_cli_args_accepts_sleep_bounds() -> None:

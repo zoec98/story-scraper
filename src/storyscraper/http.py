@@ -9,13 +9,13 @@ from typing import Any, Mapping
 
 import requests
 
-_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:145.0) Gecko/20100101 Firefox/145.0"
+_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:146.0) Gecko/20100101 Firefox/146.0"
 _DEFAULT_HEADERS = {
     "User-Agent": _USER_AGENT,
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.5",
-    ## Do not offer compression unless we can decompress things (which we can't right now)
-    #    "Accept-Encoding": "gzip, deflate, br, zstd",
+    # Avoid br/zstd unless we add decoding support; gzip/deflate are handled by requests.
+    "Accept-Encoding": "gzip, deflate",
     "DNT": "1",
     "Sec-GPC": "1",
     "Upgrade-Insecure-Requests": "1",
@@ -54,6 +54,24 @@ def set_delay_bounds(min_delay: float | None, max_delay: float | None) -> None:
         _MAX_DELAY_SECONDS = max(0.0, float(max_delay))
     if _MIN_DELAY_SECONDS > _MAX_DELAY_SECONDS:
         _MIN_DELAY_SECONDS, _MAX_DELAY_SECONDS = _MAX_DELAY_SECONDS, _MIN_DELAY_SECONDS
+
+
+def get_cookie_names(domain: str | None = None) -> list[str]:
+    """Return cookie names from the current session, optionally filtered by domain."""
+
+    names: set[str] = set()
+    domain_norm = domain.lstrip(".").lower() if domain else None
+    for cookie in _SESSION.cookies:
+        if domain_norm:
+            cookie_domain = (cookie.domain or "").lstrip(".").lower()
+            if not cookie_domain:
+                continue
+            if cookie_domain != domain_norm and not cookie_domain.endswith(
+                f".{domain_norm}"
+            ):
+                continue
+        names.add(cookie.name)
+    return sorted(names)
 
 
 def request(

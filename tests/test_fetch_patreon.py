@@ -8,13 +8,15 @@ from storyscraper.fetch import run_fetch_list_phase
 from storyscraper.options import StoryScraperOptions
 
 
-def _collection_api_response(next_link: str | None = None) -> dict:
+def _collection_api_response(
+    post_ids: list[int] | None = None, next_link: str | None = None
+) -> dict:
     return {
         "data": {
             "id": "1374355",
             "type": "collection",
             "attributes": {
-                "post_ids": [1, 2],
+                "post_ids": post_ids or [1, 2],
             },
         },
         "links": {"next": next_link} if next_link else {},
@@ -22,16 +24,7 @@ def _collection_api_response(next_link: str | None = None) -> dict:
 
 
 def _collection_api_response_second_page() -> dict:
-    return {
-        "data": {
-            "id": "1374355",
-            "type": "collection",
-            "attributes": {
-                "post_ids": [3],
-            },
-        },
-        "links": {},
-    }
+    return _collection_api_response([3])
 
 
 def _next_data_html(title: str, author: str) -> str:
@@ -90,7 +83,7 @@ def test_patreon_fetcher_collects_paginated_posts(
 
     responses = [
         _collection_api_response(
-            "https://www.patreon.com/api/collection/1374355?page=2"
+            next_link="https://www.patreon.com/api/collection/1374355?page=2"
         ),
         _collection_api_response_second_page(),
     ]
@@ -125,7 +118,7 @@ def test_patreon_fetcher_reads_metadata_from_next_data(
     html = _next_data_html("Harem House Chapters", "S. E. Aeghann")
     responses = [
         _collection_api_response(
-            "https://www.patreon.com/api/collection/1374355?page=2"
+            next_link="https://www.patreon.com/api/collection/1374355?page=2"
         ),
         _collection_api_response_second_page(),
     ]
@@ -147,3 +140,31 @@ def test_patreon_fetcher_reads_metadata_from_next_data(
     assert patreon_options.effective_name() == "Harem House Chapters"
     assert patreon_options.effective_slug() == "harem-house-chapters"
     assert patreon_options.effective_author() == "S. E. Aeghann"
+
+
+def test_patreon_fetcher_sorts_post_urls_by_id(
+    monkeypatch, tmp_path, patreon_options: StoryScraperOptions
+) -> None:
+    html = "<html><head></head><body></body></html>"
+    responses = [
+        _collection_api_response([146946762, 136354983]),
+    ]
+
+    def fake_fetch_json(url: str) -> dict:
+        return responses.pop(0)
+
+    monkeypatch.setattr(
+        "storyscraper.fetchers.patreon_fetcher.Fetcher._fetch_text",
+        lambda self, url: html,
+    )
+    monkeypatch.setattr(
+        "storyscraper.fetchers.patreon_fetcher.Fetcher._fetch_json",
+        lambda self, url: fake_fetch_json(url),
+    )
+
+    urls = run_fetch_list_phase(patreon_options, stories_root=tmp_path)
+
+    assert urls == [
+        "https://www.patreon.com/posts/136354983",
+        "https://www.patreon.com/posts/146946762",
+    ]
